@@ -14,7 +14,7 @@ const KnowledgeBasePage = () => {
   const [createForm, setCreateForm] = useState({ title: '', content: '', tags: '', visibility: 'PUBLIC' });
   const [creating, setCreating] = useState(false);
 
-  const isAdmin = user?.role?.includes('ADMIN') || user?.role?.includes('MANAGER') || user?.role?.includes('ENGINEER');
+  const isAdmin = user?.role?.includes('ADMIN') || user?.role?.includes('MANAGER');
 
   useEffect(() => {
     loadArticles();

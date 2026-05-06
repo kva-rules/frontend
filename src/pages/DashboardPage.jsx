@@ -14,11 +14,12 @@ const DashboardPage = () => {
 
   useEffect(() => {
     dispatch(fetchTickets({ status: 'OPEN' }));
-    if (user?.authUserId) {
-      dispatch(fetchNotifications(user.authUserId));
+    const notifUserId = user?.authUserId || user?.userId;
+    if (notifUserId) {
+      dispatch(fetchNotifications(notifUserId));
     }
     dispatch(fetchLeaderboard({ limit: 5 }));
-  }, [dispatch, user?.authUserId]);
+  }, [dispatch, user?.authUserId, user?.userId]);
 
   const openTicketsCount = tickets.filter(t => t.status === 'OPEN').length;
 

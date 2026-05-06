@@ -9,15 +9,17 @@ const NotificationsPage = () => {
   const { notifications, loading } = useSelector((state) => state.notifications);
   const { user } = useSelector((state) => state.auth);
 
+  const notifUserId = user?.authUserId || user?.userId;
+
   useEffect(() => {
-    if (user?.authUserId) {
-      dispatch(fetchNotifications(user.authUserId));
+    if (notifUserId) {
+      dispatch(fetchNotifications(notifUserId));
     }
-  }, [dispatch, user?.authUserId]);
+  }, [dispatch, notifUserId]);
 
   const handleNotificationClick = (notification) => {
     if (!notification.read) {
-      dispatch(markAsRead({ id: notification.notificationId, userId: user?.authUserId }));
+      dispatch(markAsRead({ id: notification.notificationId, userId: notifUserId }));
     }
     if (notification.referenceId) {
       navigate(`/tickets/${notification.referenceId}`);

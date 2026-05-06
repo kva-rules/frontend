@@ -22,11 +22,13 @@ React 18 single-page app that talks to the backend exclusively through the **API
 ## What it does
 - **Auth** — login / register / logout, stores JWT in `localStorage`, decodes with `jwt-decode` to extract `userId`, `email`, `role`.
 - **Dashboard** — open-ticket count, recent notifications, top-5 leaderboard.
-- **Tickets** — list + filter, create, detail view with comments/contributors/ratings.
-- **Solutions** — submit, view, approve/reject (managers), vote.
+- **Tickets** — list + filter, create, detail view with comments/contributors/ratings; My Tickets view.
+- **Solutions** — submit, view, approve/reject (managers), vote; My Solutions view; Admin approval queue.
 - **Knowledge base** — browse, search, view one article.
-- **Notifications** — list + unread-count badge.
+- **Notifications** — list + unread-count badge, real-time push via WebSocket (STOMP).
 - **Leaderboard** — global ranking of contributors.
+- **Profile** — personal stats, badges earned, point history.
+- **Badges** — badge catalog with unlock thresholds.
 
 ---
 
@@ -56,19 +58,26 @@ frontend/
     ├── components/
     │   ├── Navbar.jsx
     │   └── ProtectedRoute.jsx  # redirects to /login if !isAuthenticated
+    ├── hooks/
+    │   └── useNotificationSocket.js  # WebSocket/STOMP hook for real-time notifications
     ├── pages/
     │   ├── LoginPage.jsx
     │   ├── RegisterPage.jsx
     │   ├── DashboardPage.jsx
     │   ├── TicketListPage.jsx
+    │   ├── MyTicketsPage.jsx
     │   ├── TicketDetailPage.jsx
     │   ├── CreateTicketPage.jsx
     │   ├── SolutionsPage.jsx
+    │   ├── MySolutionsPage.jsx
     │   ├── SolutionDetailPage.jsx
     │   ├── KnowledgeBasePage.jsx
     │   ├── KnowledgeArticlePage.jsx
     │   ├── NotificationsPage.jsx
-    │   └── LeaderboardPage.jsx
+    │   ├── LeaderboardPage.jsx
+    │   ├── AdminApprovalQueuePage.jsx  # Manager approval queue (MANAGER/ADMIN only)
+    │   ├── ProfilePage.jsx             # Current user profile + badges + stats
+    │   └── BadgesPage.jsx              # Badge catalog + unlock thresholds
     └── store/
         ├── index.js         # configureStore
         └── slices/
@@ -139,14 +148,19 @@ Each slice uses `createSlice` + `createAsyncThunk` for side effects. Entry point
 | `/register` | `RegisterPage` | public |
 | `/dashboard` | `DashboardPage` | ProtectedRoute |
 | `/tickets` | `TicketListPage` | ProtectedRoute |
-| `/tickets/new` | `CreateTicketPage` | ProtectedRoute |
+| `/tickets/my` | `MyTicketsPage` | ProtectedRoute |
+| `/tickets/create` | `CreateTicketPage` | ProtectedRoute |
 | `/tickets/:id` | `TicketDetailPage` | ProtectedRoute |
 | `/solutions` | `SolutionsPage` | ProtectedRoute |
+| `/solutions/my` | `MySolutionsPage` | ProtectedRoute |
 | `/solutions/:id` | `SolutionDetailPage` | ProtectedRoute |
 | `/knowledge` | `KnowledgeBasePage` | ProtectedRoute |
 | `/knowledge/:id` | `KnowledgeArticlePage` | ProtectedRoute |
 | `/notifications` | `NotificationsPage` | ProtectedRoute |
 | `/leaderboard` | `LeaderboardPage` | ProtectedRoute |
+| `/admin/approvals` | `AdminApprovalQueuePage` | ProtectedRoute |
+| `/profile` | `ProfilePage` | ProtectedRoute |
+| `/badges` | `BadgesPage` | ProtectedRoute |
 
 ---
 
@@ -234,6 +248,17 @@ Deployed: ensure gateway `CorsConfig` whitelists your origin (see `api_gateway/R
 
 **Build warns about bundle size**
 Pages are not code-split. If it matters, switch each route to `React.lazy()` + `<Suspense>`.
+
+**Priority filter on Ticket List doesn't reload results (May 2026 fix)**
+Root cause: `priorityFilter` state was used in the `hasFilters` guard and in client-side filtering, but was missing from the `useEffect` dependency array. Changing the Priority dropdown updated local state but never triggered a backend reload.
+
+Fix applied in `TicketListPage.jsx`:
+```javascript
+// Before:
+useEffect(() => { loadTickets(0); }, [titleSearch, statusFilter, difficultyFilter]);
+// After:
+useEffect(() => { loadTickets(0); }, [titleSearch, statusFilter, priorityFilter, difficultyFilter]);
+```
 
 **Leaderboard / notifications empty after creating a ticket**
 Check Kafka is running and the reward-service/notification-service containers are up. Tail `docker logs reward-service`.

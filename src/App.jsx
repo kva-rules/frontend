@@ -1,8 +1,9 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Provider } from 'react-redux';
+import { Provider, useSelector } from 'react-redux';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import store from './store';
+import useNotificationSocket from './hooks/useNotificationSocket';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
@@ -17,12 +18,25 @@ import LeaderboardPage from './pages/LeaderboardPage';
 import NotificationsPage from './pages/NotificationsPage';
 import SolutionsPage from './pages/SolutionsPage';
 import SolutionDetailPage from './pages/SolutionDetailPage';
+import MySolutionsPage from './pages/MySolutionsPage';
+import MyTicketsPage from './pages/MyTicketsPage';
+import AdminApprovalQueuePage from './pages/AdminApprovalQueuePage';
+import ProfilePage from './pages/ProfilePage';
+import BadgesPage from './pages/BadgesPage';
+
+// Inner component so it can use Redux hooks inside the Provider
+function AppInner() {
+  const { user } = useSelector((state) => state.auth);
+  useNotificationSocket(user?.authUserId || user?.userId);
+  return null;
+}
 
 function App() {
   return (
     <Provider store={store}>
       <Router>
         <div className="min-h-screen bg-gray-100">
+          <AppInner />
           <Navbar />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -40,6 +54,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <TicketListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tickets/my"
+              element={
+                <ProtectedRoute>
+                  <MyTicketsPage />
                 </ProtectedRoute>
               }
             />
@@ -100,10 +122,42 @@ function App() {
               }
             />
             <Route
+              path="/solutions/my"
+              element={
+                <ProtectedRoute>
+                  <MySolutionsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/solutions/:id"
               element={
                 <ProtectedRoute>
                   <SolutionDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/approvals"
+              element={
+                <ProtectedRoute>
+                  <AdminApprovalQueuePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/badges"
+              element={
+                <ProtectedRoute>
+                  <BadgesPage />
                 </ProtectedRoute>
               }
             />

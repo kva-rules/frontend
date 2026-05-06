@@ -18,6 +18,8 @@ const StarRating = ({ value, onChange, readonly }) => (
   </div>
 );
 
+const HELPFUL_KEY = (id) => `kb_helpful_${id}`;
+
 const KnowledgeArticlePage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -26,11 +28,31 @@ const KnowledgeArticlePage = () => {
   const [averageRating, setAverageRating] = useState(null);
   const [ratingForm, setRatingForm] = useState({ rating: 0, feedback: '' });
   const [submittingRating, setSubmittingRating] = useState(false);
+  const [helpfulVote, setHelpfulVote] = useState(null);
+  const [helpfulCounts, setHelpfulCounts] = useState({ yes: 0, no: 0 });
 
   useEffect(() => {
     loadArticle();
     loadAverageRating();
+    // Restore any previously saved vote from localStorage
+    const saved = localStorage.getItem(HELPFUL_KEY(id));
+    if (saved === 'yes' || saved === 'no') setHelpfulVote(saved);
+    // Restore counts (purely local, incrementing in-browser)
+    const savedCounts = localStorage.getItem(HELPFUL_KEY(id) + '_counts');
+    if (savedCounts) {
+      try { setHelpfulCounts(JSON.parse(savedCounts)); } catch { /* ignore */ }
+    }
   }, [id]);
+
+  const handleHelpfulVote = (vote) => {
+    if (helpfulVote) return; // already voted
+    const newCounts = { ...helpfulCounts, [vote]: helpfulCounts[vote] + 1 };
+    setHelpfulVote(vote);
+    setHelpfulCounts(newCounts);
+    localStorage.setItem(HELPFUL_KEY(id), vote);
+    localStorage.setItem(HELPFUL_KEY(id) + '_counts', JSON.stringify(newCounts));
+    toast.success(vote === 'yes' ? 'Thanks for the feedback!' : "We'll work on improving this.");
+  };
 
   const loadArticle = async () => {
     setLoading(true);
@@ -249,6 +271,37 @@ const KnowledgeArticlePage = () => {
             </div>
           </div>
         )}
+
+        {/* Helpfulness Vote */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-1">Was this article helpful?</h2>
+          {helpfulVote ? (
+            <div className="flex items-center gap-4 mt-3">
+              <span className="text-gray-500 text-sm">
+                {helpfulVote === 'yes' ? '✅ You found this helpful.' : '❌ You found this unhelpful.'}
+              </span>
+              <div className="flex items-center gap-3 text-sm text-gray-400">
+                <span>👍 {helpfulCounts.yes}</span>
+                <span>👎 {helpfulCounts.no}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 mt-3">
+              <button
+                onClick={() => handleHelpfulVote('yes')}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-green-50 hover:border-green-300 transition-colors text-sm font-medium text-gray-700"
+              >
+                <span className="text-lg">👍</span> Yes
+              </button>
+              <button
+                onClick={() => handleHelpfulVote('no')}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-red-50 hover:border-red-300 transition-colors text-sm font-medium text-gray-700"
+              >
+                <span className="text-lg">👎</span> No
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Rating Section */}
         <div className="bg-white rounded-lg shadow-md p-6">

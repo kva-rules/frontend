@@ -101,9 +101,12 @@ export const solutionApi = {
   },
   create: (data) => apiClient.post('/solutions', data),
   update: (id, data) => apiClient.put(`/solutions/${id}`, data),
+  submit: (id) => apiClient.patch(`/solutions/${id}/submit`),
   approve: (id) => apiClient.put(`/solutions/${id}/approve`),
-  reject: (id) => apiClient.put(`/solutions/${id}/reject`),
+  reject: (id, reason) => apiClient.put(`/solutions/${id}/reject`, { reason }),
   delete: (id) => apiClient.delete(`/solutions/${id}`),
+  getMy: (params) => apiClient.get('/solutions/my', { params }),
+  getPending: (params) => apiClient.get('/solutions/pending', { params }),
 };
 
 export default solutionApi;

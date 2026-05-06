@@ -37,11 +37,18 @@ const SolutionsPage = () => {
         return 'bg-green-100 text-green-800';
       case 'REJECTED':
         return 'bg-red-100 text-red-800';
-      case 'PENDING':
+      case 'UNDER_REVIEW':
         return 'bg-yellow-100 text-yellow-800';
+      case 'DRAFT':
+        return 'bg-gray-100 text-gray-600';
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const statusLabel = (status) => {
+    if (status === 'UNDER_REVIEW') return 'Under Review';
+    return status.charAt(0) + status.slice(1).toLowerCase();
   };
 
   return (
@@ -54,7 +61,7 @@ const SolutionsPage = () => {
         {/* Filter Tabs */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">
           <div className="flex space-x-4">
-            {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((status) => (
+            {['ALL', 'DRAFT', 'UNDER_REVIEW', 'APPROVED', 'REJECTED'].map((status) => (
               <button
                 key={status}
                 onClick={() => setFilter(status)}
@@ -64,7 +71,7 @@ const SolutionsPage = () => {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                {status === 'ALL' ? 'All Solutions' : status.charAt(0) + status.slice(1).toLowerCase()}
+                {status === 'ALL' ? 'All Solutions' : statusLabel(status)}
               </button>
             ))}
           </div>
@@ -84,9 +91,9 @@ const SolutionsPage = () => {
             </svg>
             <p className="text-gray-500 text-lg">No solutions found</p>
             <p className="text-gray-400 text-sm mt-2">
-              {filter === 'ALL' 
+              {filter === 'ALL'
                 ? 'Solutions will appear here when submitted to tickets'
-                : `No ${filter.toLowerCase()} solutions`}
+                : `No ${statusLabel(filter).toLowerCase()} solutions`}
             </p>
           </div>
         ) : (
@@ -101,7 +108,7 @@ const SolutionsPage = () => {
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-2">
                       <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBadge(solution.status)}`}>
-                        {solution.status}
+                        {statusLabel(solution.status)}
                       </span>
                       <span className="text-gray-500 text-sm">
                         Ticket: {solution.ticketId}

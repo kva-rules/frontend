@@ -1,23 +1,26 @@
 import { useEffect, useState, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { logout } from '../store/slices/authSlice';
 import { fetchNotifications, fetchUnreadCount, markAsRead } from '../store/slices/notificationSlice';
 
 const Navbar = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated, user } = useSelector((state) => state.auth);
+  const isAdmin = user?.role?.includes('ADMIN') || user?.role?.includes('MANAGER');
   const { notifications, unreadCount } = useSelector((state) => state.notifications);
   const [showNotifications, setShowNotifications] = useState(false);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    if (isAuthenticated && user?.authUserId) {
-      dispatch(fetchNotifications(user.authUserId));
-      dispatch(fetchUnreadCount(user.authUserId));
+    const notifUserId = user?.authUserId || user?.userId;
+    if (isAuthenticated && notifUserId) {
+      dispatch(fetchNotifications(notifUserId));
+      dispatch(fetchUnreadCount(notifUserId));
     }
-  }, [dispatch, isAuthenticated, user?.authUserId]);
+  }, [dispatch, isAuthenticated, user?.authUserId, user?.userId]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -61,8 +64,14 @@ const Navbar = () => {
               <Link to="/tickets" className="hover:bg-blue-700 px-3 py-2 rounded">
                 Tickets
               </Link>
+              <Link to="/tickets/my" className="hover:bg-blue-700 px-3 py-2 rounded">
+                My Tickets
+              </Link>
               <Link to="/solutions" className="hover:bg-blue-700 px-3 py-2 rounded">
                 Solutions
+              </Link>
+              <Link to="/solutions/my" className="hover:bg-blue-700 px-3 py-2 rounded">
+                My Solutions
               </Link>
               <Link to="/knowledge" className="hover:bg-blue-700 px-3 py-2 rounded">
                 Knowledge Base
@@ -70,6 +79,14 @@ const Navbar = () => {
               <Link to="/leaderboard" className="hover:bg-blue-700 px-3 py-2 rounded">
                 Leaderboard
               </Link>
+              <Link to="/badges" className="hover:bg-blue-700 px-3 py-2 rounded">
+                Badges
+              </Link>
+              {isAdmin && (
+                <Link to="/admin/approvals" className="hover:bg-blue-700 px-3 py-2 rounded bg-yellow-500 hover:bg-yellow-600">
+                  Approvals
+                </Link>
+              )}
             </div>
           </div>
           <div className="flex items-center space-x-4">
@@ -149,9 +166,17 @@ const Navbar = () => {
               )}
             </div>
 
-            <span className="text-sm">
-              {user?.email} ({user?.role})
-            </span>
+            <Link
+              to="/profile"
+              className={`text-sm px-3 py-2 rounded transition-colors ${
+                location.pathname === '/profile'
+                  ? 'bg-blue-800'
+                  : 'hover:bg-blue-700'
+              }`}
+            >
+              {user?.name || user?.email?.split('@')[0] || user?.email}
+              <span className="ml-1 text-blue-300 text-xs">({user?.role})</span>
+            </Link>
             <button
               onClick={handleLogout}
               className="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded"

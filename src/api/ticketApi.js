@@ -6,7 +6,10 @@ export const ticketApi = {
   create: (data) => apiClient.post('/tickets', data),
   update: (id, data) => apiClient.put(`/tickets/${id}`, data),
   updateStatus: (id, status) => apiClient.put('/tickets/status', { ticketId: id, status }),
-  assign: (id, assigneeId) => apiClient.patch(`/tickets/${id}/assign`, { assigneeId }),
+  search: (params) => apiClient.get('/tickets/search', { params }),
+  assign: (id, assignedTo) => apiClient.post(`/tickets/${id}/assign`, { assignedTo }),
+  getMy: (params) => apiClient.get('/tickets/my', { params }),
+  rate: (id, rating, feedback) => apiClient.post(`/tickets/${id}/rate`, { rating, feedback }),
   delete: (id) => apiClient.delete(`/tickets/${id}`),
 };
 
