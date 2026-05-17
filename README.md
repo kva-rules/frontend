@@ -216,9 +216,31 @@ docker run --rm -p 3000:3000 frontend:latest
 ---
 
 ## Kubernetes
-- Manifest: `k8s/frontend.yaml` (Deployment + Service + part of the `ticketing.local` Ingress).
-- Image pull policy `Never` (Docker Desktop).
-- Access at `http://ticketing.local/` once `/etc/hosts` is mapped.
+- Manifest: `k8s/frontend.yaml` (Deployment + Service + part of the `ticketing.local` Ingress)
+- Namespace: `ticketing-system`
+- Image pull policy: `Never` (images loaded via `kind load docker-image`)
+- Access: `http://ticketing.local/` (once `/etc/hosts` has `127.0.0.1 ticketing.local`)
+
+```bash
+# Bring up the full cluster (builds frontend Docker image, loads into kind)
+./services.sh k8s-up
+
+# View frontend pod logs
+./services.sh k8s-logs frontend
+# or: kubectl logs -n ticketing-system deployment/frontend -f
+
+# Restart the frontend pod (after image reload)
+kubectl rollout restart deployment/frontend -n ticketing-system
+```
+
+**k8s demo accounts** (after running `./services.sh k8s-seed`):
+
+| Role | Email | Password |
+|---|---|---|
+| Admin | k8sadmin@demo.test | Demo@1234 |
+| Engineer | k8sengineer@demo.test | Demo@1234 |
+
+> In k8s mode the Vite dev server is NOT used. The frontend is served by nginx inside the Docker container. The nginx config proxies `/api/**` → `api-gateway:8080` using Kubernetes DNS.
 
 ---
 
