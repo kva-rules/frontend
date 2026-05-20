@@ -5,7 +5,7 @@ import { fetchTicketById } from '../store/slices/ticketSlice';
 import solutionApi from '../api/solutionApi';
 import ticketApi from '../api/ticketApi';
 import rewardApi from '../api/rewardApi';
-import userApi from '../api/userApi';
+import authApi from '../api/authApi';
 import { toast } from 'react-toastify';
 import SlaDeadline from '../components/SlaDeadline';
 
@@ -18,7 +18,8 @@ const TicketDetailPage = () => {
 
   const [solutions, setSolutions] = useState([]);
   const [showSolutionForm, setShowSolutionForm] = useState(false);
-  const [solutionForm, setSolutionForm] = useState({ title: '', solutionContent: '', articleTitle: '', articleContent: '' });
+  const [solutionForm, setSolutionForm] = useState({ title: '', solutionContent: '', articleTitle: '', articleContent: '', codeSnippet: '', codeLanguage: 'javascript' });
+  const [solutionFiles, setSolutionFiles] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [showRewardForm, setShowRewardForm] = useState(false);
   const [rewardForm, setRewardForm] = useState({ points: 25, reason: 'Manual award' });
@@ -30,6 +31,9 @@ const TicketDetailPage = () => {
   const [assignTo, setAssignTo] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [users, setUsers] = useState([]);
+  const [assignedSolutionForm, setAssignedSolutionForm] = useState({ title: '', solutionContent: '', codeSnippet: '', codeLanguage: 'javascript' });
+  const [assignedFiles, setAssignedFiles] = useState([]);
+  const [submittingAssigned, setSubmittingAssigned] = useState(false);
   const [csatRating, setCsatRating] = useState(0);
   const [csatFeedback, setCsatFeedback] = useState('');
   const [submittingCsat, setSubmittingCsat] = useState(false);
@@ -43,8 +47,8 @@ const TicketDetailPage = () => {
 
   const loadUsers = async () => {
     try {
-      const response = await userApi.getAll();
-      setUsers(response.data?.data?.content || response.data?.data || response.data || []);
+      const response = await authApi.getAssignableUsers();
+      setUsers(response.data?.data || []);
     } catch {
       // users list is optional — silently fail
     }
@@ -63,16 +67,23 @@ const TicketDetailPage = () => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await solutionApi.create({
+      const res = await solutionApi.create({
         ticketId: id,
         title: solutionForm.title,
         solutionContent: solutionForm.solutionContent,
         articleTitle: solutionForm.articleTitle || undefined,
         articleContent: solutionForm.articleContent || undefined,
+        codeSnippet: solutionForm.codeSnippet || undefined,
+        codeLanguage: solutionForm.codeSnippet ? solutionForm.codeLanguage : undefined,
       });
+      const newId = res.data?.data?.solutionId || res.data?.solutionId;
+      if (newId && solutionFiles.length > 0) {
+        await Promise.allSettled(solutionFiles.map(f => solutionApi.uploadAttachment(newId, f)));
+      }
       toast.success('Solution saved as draft. Submit it for review when ready.');
       setShowSolutionForm(false);
-      setSolutionForm({ title: '', solutionContent: '', articleTitle: '', articleContent: '' });
+      setSolutionForm({ title: '', solutionContent: '', articleTitle: '', articleContent: '', codeSnippet: '', codeLanguage: 'javascript' });
+      setSolutionFiles([]);
       loadSolutions();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to submit solution');
@@ -169,6 +180,34 @@ const TicketDetailPage = () => {
     }
   };
 
+  const handleAssignedSolutionSubmit = async (e) => {
+    e.preventDefault();
+    if (!assignedSolutionForm.title.trim() || !assignedSolutionForm.solutionContent.trim()) return;
+    setSubmittingAssigned(true);
+    try {
+      const createRes = await solutionApi.create({
+        ticketId: id,
+        title: assignedSolutionForm.title,
+        solutionContent: assignedSolutionForm.solutionContent,
+        codeSnippet: assignedSolutionForm.codeSnippet || undefined,
+        codeLanguage: assignedSolutionForm.codeSnippet ? assignedSolutionForm.codeLanguage : undefined,
+      });
+      const newId = createRes.data?.data?.solutionId || createRes.data?.solutionId;
+      if (newId && assignedFiles.length > 0) {
+        await Promise.allSettled(assignedFiles.map(f => solutionApi.uploadAttachment(newId, f)));
+      }
+      await solutionApi.submit(newId);
+      toast.success('Solution submitted for review!');
+      setAssignedSolutionForm({ title: '', solutionContent: '', codeSnippet: '', codeLanguage: 'javascript' });
+      setAssignedFiles([]);
+      loadSolutions();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to submit solution');
+    } finally {
+      setSubmittingAssigned(false);
+    }
+  };
+
   const handleCsatSubmit = async (e) => {
     e.preventDefault();
     if (!csatRating) {
@@ -208,6 +247,9 @@ const TicketDetailPage = () => {
   }
 
   const isAdmin = user?.role?.includes('ADMIN') || user?.role?.includes('MANAGER');
+  const isOwner = user?.email === selectedTicket?.createdBy;
+  const isAssigned = user?.authUserId && selectedTicket?.assignedTo === user.authUserId;
+  const assignedUserEmail = users.find(u => u.authUserId === selectedTicket?.assignedTo)?.email || selectedTicket?.assignedTo;
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
@@ -271,6 +313,31 @@ const TicketDetailPage = () => {
               <span className="ml-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span>
             </div>
           </div>
+
+          {/* Owner actions: close / reopen own ticket */}
+          {isOwner && !isAdmin && (
+            <div className="border-t pt-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium text-gray-600">Your ticket:</span>
+                {['OPEN', 'IN_PROGRESS', 'RESOLVED'].includes(selectedTicket.status) && (
+                  <button
+                    onClick={() => handleStatusChange('CLOSED')}
+                    className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
+                  >
+                    Close Ticket
+                  </button>
+                )}
+                {selectedTicket.status === 'CLOSED' && (
+                  <button
+                    onClick={() => handleStatusChange('REOPENED')}
+                    className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
+                  >
+                    Reopen Ticket
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Admin actions: status change + reward */}
           {isAdmin && (
@@ -356,29 +423,22 @@ const TicketDetailPage = () => {
             <h2 className="text-lg font-semibold text-gray-800 mb-3">Assign Ticket</h2>
             <form onSubmit={handleAssign} className="flex gap-3 items-end flex-wrap">
               <div className="flex-1 min-w-48">
-                <label className="block text-xs font-bold text-gray-600 mb-1">Assign to (email or user ID)</label>
-                {users.length > 0 ? (
-                  <select
-                    value={assignTo}
-                    onChange={(e) => setAssignTo(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  >
-                    <option value="">Select a user...</option>
-                    {users.map((u) => (
-                      <option key={u.userId || u.id} value={u.email || u.userId || u.id}>
-                        {u.email || u.username || u.userId}
+                <label className="block text-xs font-bold text-gray-600 mb-1">Assign to</label>
+                <select
+                  value={assignTo}
+                  onChange={(e) => setAssignTo(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  <option value="">Select a user...</option>
+                  {users.map((u) => {
+                    const roleLabel = u.roles?.[0]?.replace('ROLE_', '') || 'USER';
+                    return (
+                      <option key={u.authUserId} value={u.authUserId}>
+                        {u.email} ({roleLabel})
                       </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={assignTo}
-                    onChange={(e) => setAssignTo(e.target.value)}
-                    placeholder="Enter email or user ID"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                )}
+                    );
+                  })}
+                </select>
               </div>
               <button
                 type="submit"
@@ -390,9 +450,91 @@ const TicketDetailPage = () => {
             </form>
             {selectedTicket?.assignedTo && (
               <p className="text-sm text-gray-500 mt-2">
-                Currently assigned to: <span className="font-medium text-gray-700">{selectedTicket.assignedTo}</span>
+                Currently assigned to: <span className="font-medium text-gray-700">{assignedUserEmail}</span>
               </p>
             )}
+          </div>
+        )}
+
+        {/* Assigned person: direct solution submit (goes straight to UNDER_REVIEW) */}
+        {isAssigned && !isAdmin && ['OPEN', 'IN_PROGRESS'].includes(selectedTicket?.status) && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">Submit Your Solution</h2>
+            <p className="text-gray-500 text-sm mb-4">You are assigned to this ticket. Your solution will go directly to review.</p>
+            <form onSubmit={handleAssignedSolutionSubmit} className="space-y-4">
+              <div>
+                <label className="block text-gray-700 text-sm font-bold mb-1">Solution Title <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={assignedSolutionForm.title}
+                  onChange={(e) => setAssignedSolutionForm({ ...assignedSolutionForm, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="Brief title for your solution"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm font-bold mb-1">Solution Description <span className="text-red-500">*</span></label>
+                <textarea
+                  value={assignedSolutionForm.solutionContent}
+                  onChange={(e) => setAssignedSolutionForm({ ...assignedSolutionForm, solutionContent: e.target.value })}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="Describe your solution in detail..."
+                  required
+                />
+              </div>
+              <div className="border-t pt-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <label className="text-gray-700 text-sm font-bold">Code Snippet</label>
+                  <select
+                    value={assignedSolutionForm.codeLanguage}
+                    onChange={(e) => setAssignedSolutionForm({ ...assignedSolutionForm, codeLanguage: e.target.value })}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {['javascript','python','java','sql','bash','typescript','go','other'].map(l => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-gray-400">optional</span>
+                </div>
+                <textarea
+                  value={assignedSolutionForm.codeSnippet}
+                  onChange={(e) => setAssignedSolutionForm({ ...assignedSolutionForm, codeSnippet: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm bg-gray-50"
+                  placeholder="Paste relevant code here (optional)..."
+                />
+              </div>
+              <div className="border-t pt-3">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Attachments <span className="text-xs text-gray-400 font-normal">— images, PDFs, text (max 5 MB each)</span></label>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,text/plain,application/pdf"
+                  onChange={(e) => setAssignedFiles(Array.from(e.target.files))}
+                  className="block text-sm text-gray-500 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                />
+                {assignedFiles.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {assignedFiles.map((f, i) => (
+                      <li key={i} className="text-xs text-gray-600 flex items-center gap-1">
+                        <span>📎</span> {f.name} <span className="text-gray-400">({(f.size / 1024).toFixed(1)} KB)</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={submittingAssigned}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 text-sm font-medium"
+                >
+                  {submittingAssigned ? 'Submitting...' : 'Submit for Review'}
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
@@ -496,6 +638,51 @@ const TicketDetailPage = () => {
                 />
               </div>
 
+              {/* Code snippet */}
+              <div className="border-t pt-4 mt-2">
+                <p className="text-xs text-gray-500 mb-3 font-medium uppercase tracking-wide">Optional: Code Snippet</p>
+                <div className="mb-3 flex gap-2 items-center">
+                  <label className="block text-gray-700 text-sm font-bold whitespace-nowrap">Language</label>
+                  <select
+                    value={solutionForm.codeLanguage}
+                    onChange={(e) => setSolutionForm({ ...solutionForm, codeLanguage: e.target.value })}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {['javascript','python','java','sql','bash','typescript','go','other'].map(l => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                </div>
+                <textarea
+                  value={solutionForm.codeSnippet}
+                  onChange={(e) => setSolutionForm({ ...solutionForm, codeSnippet: e.target.value })}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm bg-gray-50"
+                  placeholder="Paste relevant code here (optional)..."
+                />
+              </div>
+
+              {/* File attachments */}
+              <div className="border-t pt-4 mt-2">
+                <p className="text-xs text-gray-500 mb-3 font-medium uppercase tracking-wide">Optional: Attachments (images, PDFs, text — max 5 MB each)</p>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,text/plain,application/pdf"
+                  onChange={(e) => setSolutionFiles(Array.from(e.target.files))}
+                  className="block text-sm text-gray-500 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                {solutionFiles.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {solutionFiles.map((f, i) => (
+                      <li key={i} className="text-xs text-gray-600 flex items-center gap-1">
+                        <span>📎</span> {f.name} <span className="text-gray-400">({(f.size / 1024).toFixed(1)} KB)</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
               {/* Optional KB article */}
               <div className="border-t pt-4 mt-2">
                 <p className="text-xs text-gray-500 mb-3 font-medium uppercase tracking-wide">Optional: Add Knowledge Base Article</p>
@@ -595,6 +782,66 @@ const TicketDetailPage = () => {
                       </div>
                     )}
                     <p className="text-gray-700 mt-2">{solution.solutionContent}</p>
+
+                    {/* Code snippet */}
+                    {solution.codeSnippet && (
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide bg-gray-100 px-2 py-0.5 rounded">
+                            {solution.codeLanguage || 'code'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => { navigator.clipboard.writeText(solution.codeSnippet); toast.success('Copied!'); }}
+                            className="text-xs text-blue-500 hover:text-blue-700"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                        <pre className="bg-gray-900 text-green-300 rounded-md p-3 text-sm overflow-x-auto whitespace-pre-wrap break-words">
+                          <code>{solution.codeSnippet}</code>
+                        </pre>
+                      </div>
+                    )}
+
+                    {/* Attachments */}
+                    {solution.attachments && solution.attachments.length > 0 && (
+                      <div className="mt-3 border-t pt-3">
+                        <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Attachments</p>
+                        <div className="flex flex-wrap gap-3">
+                          {solution.attachments.map((att) => {
+                            const isImage = att.fileType?.startsWith('image/');
+                            return (
+                              <div key={att.attachmentId} className="border border-gray-200 rounded-lg overflow-hidden">
+                                {isImage ? (
+                                  <a href={att.fileUrl} target="_blank" rel="noopener noreferrer">
+                                    <img
+                                      src={att.fileUrl}
+                                      alt={att.fileName}
+                                      className="w-32 h-24 object-cover hover:opacity-90 transition-opacity"
+                                    />
+                                    <p className="text-xs text-gray-500 px-2 py-1 truncate max-w-32">{att.fileName}</p>
+                                  </a>
+                                ) : (
+                                  <a
+                                    href={att.fileUrl}
+                                    download={att.fileName}
+                                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-sm text-blue-600 hover:text-blue-800"
+                                  >
+                                    <span>📄</span>
+                                    <span className="max-w-32 truncate">{att.fileName}</span>
+                                    <span className="text-xs text-gray-400">
+                                      {att.fileSize ? `${(att.fileSize / 1024).toFixed(1)} KB` : ''}
+                                    </span>
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     <p className="text-sm text-gray-500 mt-2">
                       Submitted: {new Date(solution.createdAt).toLocaleString()}
                     </p>

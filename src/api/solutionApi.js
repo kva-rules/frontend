@@ -102,6 +102,13 @@ export const solutionApi = {
   create: (data) => apiClient.post('/solutions', data),
   update: (id, data) => apiClient.put(`/solutions/${id}`, data),
   submit: (id) => apiClient.patch(`/solutions/${id}/submit`),
+  uploadAttachment: (solutionId, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return apiClient.post(`/solutions/${solutionId}/attachments/upload`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
   approve: (id) => apiClient.put(`/solutions/${id}/approve`),
   reject: (id, reason) => apiClient.put(`/solutions/${id}/reject`, { reason }),
   delete: (id) => apiClient.delete(`/solutions/${id}`),
